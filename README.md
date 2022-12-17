@@ -20,7 +20,7 @@ pip install a-unet
 
 ```py
 from typing import List
-from a_unet.blocks import DownsampleT, Repeat, ResnetBlockT, Skip, UpsampleT
+from a_unet import DownsampleT, Repeat, ResnetBlockT, Skip, UpsampleT
 from torch import nn
 
 def UNet(
