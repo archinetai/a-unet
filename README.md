@@ -35,12 +35,11 @@ def UNet(
     # Define convolutional blocks types with provided dimensions
     Downsample = DownsampleT(dim=dim)
     Upsample = UpsampleT(dim=dim)
-    ResnetBlock = ResnetBlockT(dim=dim)
 
     # Resnet stack
-    def Block(channels: int, n_blocks: int) -> nn.Module:
-        resnet_block = ResnetBlock(in_channels=channels, out_channels=channels)
-        resnet_stack = Repeat(resnet_block, times=n_blocks)
+    def Stack(channels: int, n_blocks: int) -> nn.Module:
+        ResnetBlock = ResnetBlockT(dim=dim, in_channels=channels, out_channels=channels)
+        resnet_stack = Repeat(ResnetBlock, times=n_blocks)
         return resnet_stack
 
     # Build UNet recursively
@@ -52,14 +51,13 @@ def UNet(
 
         return Skip(
             Downsample(factor=factor, in_channels=n_channels, out_channels=channels[i]),
-            Block(channels=channels[i], n_blocks=blocks[i]),
+            Stack(channels=channels[i], n_blocks=blocks[i]),
             build(i + 1),
-            Block(channels=channels[i], n_blocks=blocks[i]),
+            Stack(channels=channels[i], n_blocks=blocks[i]),
             Upsample(factor=factor, in_channels=channels[i], out_channels=n_channels),
         )
 
     return build(0)
-
 ```
 
 </details>

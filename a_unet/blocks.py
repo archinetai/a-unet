@@ -42,7 +42,9 @@ class Sequential(nn.Module):
 
     def __init__(self, *blocks):
         super().__init__()
-        self.blocks = nn.ModuleList(blocks)
+        self.blocks = nn.ModuleList(
+            [b if isinstance(b, nn.Module) else b() for b in blocks]
+        )
 
     def forward(self, x: Tensor, *args) -> Tensor:
         for block in self.blocks:
