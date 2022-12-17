@@ -14,9 +14,9 @@ pip install a-unet
 
 ### Basic UNet
 
-A convolutional only UNet generic to any dimension, using A-UNet blocks.
+<details> <summary> A convolutional only UNet generic to any dimension, using A-UNet blocks. </summary>
 
-<details><summary>[`examples/unet_basic.py`](examples/unet_basic.py)</summary>
+[`examples/unet_basic.py`](examples/unet_basic.py)
 
 ```py
 from typing import List
@@ -66,7 +66,6 @@ def UNet(
 
 </details>
 
-#### Example
 ```py
 unet = UNet(dim=2, in_channels=8, channels=[256, 512], factors=[2, 2], blocks=[2, 2])
 x = torch.randn(1, 8, 16, 16)
