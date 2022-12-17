@@ -13,7 +13,10 @@ pip install a-unet
 ## Usage
 
 ### Basic UNet
-This UNet [`examples/unet_basic.py`](examples/unet_basic.py) shows how build a convolutional only UNet generic to any dimension, using A-UNet blocks.
+
+A convolutional only UNet generic to any dimension, using A-UNet blocks.
+
+<details><summary>[`examples/unet_basic.py`](examples/unet_basic.py)</summary>
 
 ```py
 from typing import List
@@ -60,6 +63,8 @@ def UNet(
     return build(0)
 
 ```
+
+</details>
 
 #### Example
 ```py
