@@ -16,8 +16,6 @@ pip install a-unet
 
 <details> <summary> A convolutional only UNet generic to any dimension, using A-UNet blocks. </summary>
 
-[`examples/unet_basic.py`](examples/unet_basic.py)
-
 ```py
 from typing import List
 from a_unet import DownsampleT, Repeat, ResnetBlockT, Skip, UpsampleT
