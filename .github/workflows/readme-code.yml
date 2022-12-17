@@ -1,9 +1,6 @@
 name: Embed code in README
 
-on:
-  pull_request:
-    branches:
-      - main
+on: push
 
 jobs:
   embed-code:
@@ -19,5 +16,5 @@ jobs:
         with:
           markdown: "README.md"
           token: ${{ secrets.GITHUB_TOKEN }}
-          message: "synchronizing Readme"
+          message: "sync: readme"
           silent: true
