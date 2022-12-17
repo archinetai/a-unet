@@ -17,10 +17,8 @@ This UNet [`examples/unet_basic.py`](examples/unet_basic.py) shows how build a c
 
 ```py
 from typing import List
-
 from a_unet.blocks import DownsampleT, Repeat, ResnetBlockT, Skip, UpsampleT
 from torch import nn
-
 
 def UNet(
     dim: int,
@@ -67,6 +65,5 @@ def UNet(
 ```py
 unet = UNet(dim=2, in_channels=8, channels=[256, 512], factors=[2, 2], blocks=[2, 2])
 x = torch.randn(1, 8, 16, 16)
-y = unet(x)
-print(y.shape)
+y = unet(x) # [1, 8, 16, 16]
 ```
