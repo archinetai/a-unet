@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 setup(
     name="a-unet",
     packages=find_packages(exclude=[]),
-    version="0.0.2",
+    version="0.0.3",
     license="MIT",
     description="A-UNet",
     long_description_content_type="text/markdown",

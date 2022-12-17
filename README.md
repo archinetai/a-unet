@@ -18,7 +18,7 @@ pip install a-unet
 
 ```py
 from typing import List
-from a_unet import DownsampleT, Repeat, ResnetBlockT, Skip, UpsampleT
+from a_unet import T, Downsample, Repeat, ResnetBlock, Skip, Upsample
 from torch import nn
 
 def UNet(
@@ -31,33 +31,26 @@ def UNet(
     # Check lengths
     n_layers = len(channels)
     assert n_layers == len(factors) and n_layers == len(blocks), "lengths must match"
-
-    # Define convolutional blocks types with provided dimensions
-    Downsample = DownsampleT(dim=dim)
-    Upsample = UpsampleT(dim=dim)
-
     # Resnet stack
     def Stack(channels: int, n_blocks: int) -> nn.Module:
-        ResnetBlock = ResnetBlockT(dim=dim, in_channels=channels, out_channels=channels)
-        resnet_stack = Repeat(ResnetBlock, times=n_blocks)
-        return resnet_stack
-
+        # The T function is used create a type template that pre-initializes paramters if called
+        Block = T(ResnetBlock)(dim=dim, in_channels=channels, out_channels=channels)
+        resnet = Repeat(Block, times=n_blocks)
+        return resnet
     # Build UNet recursively
-    def build(i: int) -> nn.Module:
-        if i == n_layers:
-            return nn.Identity()
-        n_channels = channels[i - 1] if i > 0 else in_channels
+    def Net(i: int) -> nn.Module:
+        if i == n_layers: return nn.Identity()
+        in_ch, out_ch = (channels[i - 1] if i > 0 else in_channels), channels[i]
         factor = factors[i]
-
-        return Skip(
-            Downsample(factor=factor, in_channels=n_channels, out_channels=channels[i]),
+        # Wraps modules with skip connection that merges paths with torch.add
+        return Skip(torch.add)(
+            Downsample(dim=dim, factor=factor, in_channels=in_ch, out_channels=out_ch),
             Stack(channels=channels[i], n_blocks=blocks[i]),
-            build(i + 1),
+            Net(i + 1),
             Stack(channels=channels[i], n_blocks=blocks[i]),
-            Upsample(factor=factor, in_channels=channels[i], out_channels=n_channels),
+            Upsample(dim=dim, factor=factor, in_channels=out_ch, out_channels=in_ch),
         )
-
-    return build(0)
+    return Net(0)
 ```
 
 </details>

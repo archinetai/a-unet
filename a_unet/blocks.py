@@ -86,12 +86,15 @@ def Repeat(block: Any, times: int) -> Any:
     return Sequential(*(block,) * times)
 
 
-class Skip(Sequential):
+def Skip(merge_fn: Callable[[Tensor, Tensor], Tensor] = torch.add) -> Type[Sequential]:
+    class Skip(Sequential):
 
-    """Adds skip connection around modules"""
+        """Adds skip connection around modules"""
 
-    def forward(self, x: Tensor, *args) -> Tensor:
-        return x + super().forward(x, *args)
+        def forward(self, x: Tensor, *args) -> Tensor:
+            return merge_fn(x, super().forward(x, *args))
+
+    return Skip
 
 
 def Conv(dim: int, *args, **kwargs) -> nn.Module:
@@ -114,7 +117,7 @@ def Upsample(
 def ConvBlock(
     in_channels: int,
     activation_t=nn.SiLU,
-    norm_t=T(nn.GroupNorm)(num_groups=8),
+    norm_t=T(nn.GroupNorm)(num_groups=1),
     conv_t=Conv,
     **kwargs,
 ) -> nn.Module:
@@ -251,7 +254,7 @@ class Attention(nn.Module):
 
 def FeedForward(features: int, multiplier: int) -> nn.Module:
     mid_features = features * multiplier
-    return Skip(
+    return Skip(torch.add)(
         nn.Linear(in_features=features, out_features=mid_features),
         nn.GELU(),
         nn.Linear(in_features=mid_features, out_features=features),
