@@ -149,18 +149,7 @@ def ResnetBlock(
     return Module([conv_block, conv], lambda x: conv_block(x) + conv(x))
 
 
-def add_mask(sim: Tensor, mask: Tensor) -> Tensor:
-    b, ndim = sim.shape[0], mask.ndim
-    if ndim == 3:
-        mask = rearrange(mask, "b n m -> b 1 n m")
-    if ndim == 2:
-        mask = repeat(mask, "n m -> b 1 n m", b=b)
-    max_neg_value = -torch.finfo(sim.dtype).max
-    sim = sim.masked_fill(~mask, max_neg_value)
-    return sim
-
-
-def AttentionBase(features: int, head_features: int, num_heads: int):
+def AttentionBase(features: int, head_features: int, num_heads: int) -> nn.Module:
     scale = head_features**-0.5
     mid_features = head_features * num_heads
     to_out = nn.Linear(in_features=mid_features, out_features=features, bias=False)
@@ -173,11 +162,33 @@ def AttentionBase(features: int, head_features: int, num_heads: int):
         q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=h), (q, k, v))
         # Compute similarity matrix and add eventual mask
         sim = einsum("... n d, ... m d -> ... n m", q, k) * scale
-        sim = add_mask(sim, mask) if exists(mask) else sim
         # Get attention matrix with softmax
-        attn = sim.softmax(dim=-1, dtype=torch.float32)
+        attn = sim.softmax(dim=-1)
         # Compute values
         out = einsum("... n m, ... m d -> ... n d", attn, v)
+        out = rearrange(out, "b h n d -> b n (h d)")
+        return to_out(out)
+
+    return Module([to_out], forward)
+
+
+def LinearAttentionBase(features: int, head_features: int, num_heads: int) -> nn.Module:
+    scale = head_features**-0.5
+    mid_features = head_features * num_heads
+    to_out = nn.Linear(in_features=mid_features, out_features=features, bias=False)
+
+    def forward(
+        q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None
+    ) -> Tensor:
+        h = num_heads
+        # Split heads
+        q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=h), (q, k, v))
+        # Softmax rows and cols
+        q = q.softmax(dim=-1) * scale
+        k = k.softmax(dim=-2)
+        # Attend on channel dim
+        attn = einsum("... n d, ... n c -> ... d c", k, v)
+        out = einsum("... n d, ... d c -> ... n c", q, attn)
         out = rearrange(out, "b h n d -> b n (h d)")
         return to_out(out)
 

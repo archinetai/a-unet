@@ -31,12 +31,14 @@ def UNet(
     # Check lengths
     n_layers = len(channels)
     assert n_layers == len(factors) and n_layers == len(blocks), "lengths must match"
+
     # Resnet stack
     def Stack(channels: int, n_blocks: int) -> nn.Module:
         # The T function is used create a type template that pre-initializes paramters if called
         Block = T(ResnetBlock)(dim=dim, in_channels=channels, out_channels=channels)
         resnet = Repeat(Block, times=n_blocks)
         return resnet
+
     # Build UNet recursively
     def Net(i: int) -> nn.Module:
         if i == n_layers: return nn.Identity()
@@ -45,9 +47,9 @@ def UNet(
         # Wraps modules with skip connection that merges paths with torch.add
         return Skip(torch.add)(
             Downsample(dim=dim, factor=factor, in_channels=in_ch, out_channels=out_ch),
-            Stack(channels=channels[i], n_blocks=blocks[i]),
+            Stack(channels=out_ch, n_blocks=blocks[i]),
             Net(i + 1),
-            Stack(channels=channels[i], n_blocks=blocks[i]),
+            Stack(channels=out_ch, n_blocks=blocks[i]),
             Upsample(dim=dim, factor=factor, in_channels=out_ch, out_channels=in_ch),
         )
     return Net(0)
