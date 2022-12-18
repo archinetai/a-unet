@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional, Sequence, Type, TypeVar
+from typing import Any, Callable, Optional, Sequence, Type, TypeVar, Union
 
 import torch
 from einops import pack, rearrange, repeat, unpack
@@ -7,10 +7,19 @@ from typing_extensions import TypeGuard
 
 V = TypeVar("V")
 
+"""
+Helper functions
+"""
+
 
 def T(t: Callable[..., V]) -> Callable[..., Callable[..., V]]:
     """Where the magic happens, builds a type template for a given type"""
     return lambda *a, **ka: lambda *b, **kb: t(*(*a, *b), **{**ka, **kb})
+
+
+def Ts(t: Callable[..., V]) -> Callable[..., Callable[..., V]]:
+    """Builds a type template for a given type that accepts a list of instances"""
+    return lambda *types: lambda: t(*[tp() for tp in types])
 
 
 def exists(val: Optional[V]) -> TypeGuard[V]:
@@ -18,9 +27,7 @@ def exists(val: Optional[V]) -> TypeGuard[V]:
 
 
 def default(val: Optional[V], d: V) -> V:
-    if exists(val):
-        return val
-    return d
+    return val if exists(val) else d
 
 
 def Module(modules: Sequence[nn.Module], forward_fn: Callable):
@@ -38,13 +45,11 @@ def Module(modules: Sequence[nn.Module], forward_fn: Callable):
 
 
 class Sequential(nn.Module):
-    """Custom Sequential that forwards args"""
+    """Custom Sequential that includes all args"""
 
     def __init__(self, *blocks):
         super().__init__()
-        self.blocks = nn.ModuleList(
-            [b if isinstance(b, nn.Module) else b() for b in blocks]
-        )
+        self.blocks = nn.ModuleList(blocks)
 
     def forward(self, x: Tensor, *args) -> Tensor:
         for block in self.blocks:
@@ -53,7 +58,7 @@ class Sequential(nn.Module):
 
 
 def Select(args_fn: Callable) -> Callable[..., Type[nn.Module]]:
-    """Selects (swap, remove) forward arguments given a (lambda) function"""
+    """Selects (swap, remove, repeat) forward arguments given a (lambda) function"""
 
     def fn(block_t: Type[nn.Module]) -> Type[nn.Module]:
         class Select(nn.Module):
@@ -82,8 +87,9 @@ class Packed(Sequential):
         return x
 
 
-def Repeat(block: Any, times: int) -> Any:
-    return Sequential(*(block,) * times)
+def Repeat(m: Union[nn.Module, Type[nn.Module]], times: int) -> Any:
+    ms = (m,) * times
+    return Sequential(*ms) if isinstance(m, nn.Module) else Ts(Sequential)(*ms)
 
 
 def Skip(merge_fn: Callable[[Tensor, Tensor], Tensor] = torch.add) -> Type[Sequential]:
@@ -97,24 +103,30 @@ def Skip(merge_fn: Callable[[Tensor, Tensor], Tensor] = torch.add) -> Type[Seque
     return Skip
 
 
+"""
+Modules
+"""
+
+
 def Conv(dim: int, *args, **kwargs) -> nn.Module:
     return [nn.Conv1d, nn.Conv2d, nn.Conv3d][dim - 1](*args, **kwargs)
 
 
-def Downsample(factor: int = 2, conv_t=Conv, **kwargs) -> nn.Module:
-    return conv_t(kernel_size=factor, stride=factor, **kwargs)
+def Downsample(dim: int, factor: int = 2, conv_t=Conv, **kwargs) -> nn.Module:
+    return conv_t(dim=dim, kernel_size=factor, stride=factor, **kwargs)
 
 
 def Upsample(
-    factor: int = 2, mode: str = "nearest", conv_t=Conv, **kwargs
+    dim: int, factor: int = 2, mode: str = "nearest", conv_t=Conv, **kwargs
 ) -> nn.Module:
     return nn.Sequential(
         nn.Upsample(scale_factor=factor, mode="nearest"),
-        conv_t(kernel_size=3, padding=1, **kwargs),
+        conv_t(dim=dim, kernel_size=3, padding=1, **kwargs),
     )
 
 
 def ConvBlock(
+    dim: int,
     in_channels: int,
     activation_t=nn.SiLU,
     norm_t=T(nn.GroupNorm)(num_groups=1),
@@ -124,14 +136,14 @@ def ConvBlock(
     return nn.Sequential(
         norm_t(num_channels=in_channels),
         activation_t(),
-        conv_t(in_channels=in_channels, **kwargs),
+        conv_t(dim=dim, in_channels=in_channels, **kwargs),
     )
 
 
 def ResnetBlock(
+    dim: int,
     in_channels: int,
     out_channels: int,
-    dim: Optional[int] = None,
     conv_block_t=ConvBlock,
     conv_t=Conv,
 ) -> nn.Module:
@@ -177,9 +189,7 @@ def LinearAttentionBase(features: int, head_features: int, num_heads: int) -> nn
     mid_features = head_features * num_heads
     to_out = nn.Linear(in_features=mid_features, out_features=features, bias=False)
 
-    def forward(
-        q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None
-    ) -> Tensor:
+    def forward(q: Tensor, k: Tensor, v: Tensor) -> Tensor:
         h = num_heads
         # Split heads
         q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=h), (q, k, v))
@@ -270,12 +280,3 @@ def FeedForward(features: int, multiplier: int) -> nn.Module:
         nn.GELU(),
         nn.Linear(in_features=mid_features, out_features=features),
     )
-
-
-ConvT = T(Conv)
-ConvBlockT = T(ConvBlock)
-DownsampleT = T(Downsample)
-UpsampleT = T(Upsample)
-ResnetBlockT = T(ResnetBlock)
-AttentionT = T(Attention)
-FeedForwardT = T(FeedForward)
