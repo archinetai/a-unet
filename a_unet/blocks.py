@@ -208,7 +208,7 @@ def LinearAttentionBase(features: int, head_features: int, num_heads: int) -> nn
 def FixedEmbedding(max_length: int, features: int):
     embedding = nn.Embedding(max_length, features)
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(x: Tensor) -> Tensor:
         batch_size, length, device = *x.shape[0:2], x.device
         assert_message = "Input sequence length must be <= max_length"
         assert length <= max_length, assert_message
@@ -280,3 +280,57 @@ def FeedForward(features: int, multiplier: int) -> nn.Module:
         nn.GELU(),
         nn.Linear(in_features=mid_features, out_features=features),
     )
+
+
+def rand_bool(shape: Any, proba: float, device: Any = None) -> Tensor:
+    if proba == 1:
+        return torch.ones(shape, device=device, dtype=torch.bool)
+    elif proba == 0:
+        return torch.zeros(shape, device=device, dtype=torch.bool)
+    else:
+        return torch.bernoulli(torch.full(shape, proba, device=device)).to(torch.bool)
+
+
+def CFG(
+    net_t: Type[nn.Module],
+    embedding_max_length: int,
+) -> Callable[..., nn.Module]:
+    """Classifier-Free Guidance -> CFG(UNet, embedding_max_length=512)(...)"""
+
+    def CFGNet(embedding_features: int, **kwargs) -> nn.Module:
+        fixed_embedding = FixedEmbedding(
+            max_length=embedding_max_length,
+            features=embedding_features,
+        )
+        net = net_t(embedding_features=embedding_features, **kwargs)  # type: ignore
+
+        def forward(
+            x: Tensor,
+            embedding: Optional[Tensor] = None,
+            embedding_scale: float = 1.0,
+            embedding_mask_proba: float = 0.0,
+            **kwargs,
+        ):
+            assert exists(embedding), "embedding required when using CFG"
+            b, device = embedding.shape[0], embedding.device
+            embedding_mask = fixed_embedding(embedding)
+
+            if embedding_mask_proba > 0.0:
+                # Randomly mask embedding
+                batch_mask = rand_bool(
+                    shape=(b, 1, 1), proba=embedding_mask_proba, device=device
+                )
+                embedding = torch.where(batch_mask, embedding_mask, embedding)
+
+            if embedding_scale != 1.0:
+                # Compute both normal and fixed embedding outputs
+                out = net(x, embedding=embedding, **kwargs)
+                out_masked = net(x, embedding=embedding_mask, **kwargs)
+                # Scale conditional output using classifier-free guidance
+                return out_masked + (out - out_masked) * embedding_scale
+            else:
+                return net(x, embedding=embedding, **kwargs)
+
+        return Module([fixed_embedding, net], forward)
+
+    return CFGNet

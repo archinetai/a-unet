@@ -14,7 +14,7 @@ pip install a-unet
 
 ### Basic UNet
 
-<details> <summary> (Code): A convolutional only UNet generic to any dimension, using A-UNet blocks. </summary>
+<details> <summary> (Code): A convolutional only UNet generic to any dimension. </summary>
 
 ```py
 from typing import List
