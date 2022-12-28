@@ -75,7 +75,7 @@ y = unet(x) # [1, 8, 16, 16]
 <details> <summary> (Code): ApeX is a UNet template complete with tools for easy customizability. The following example UNet includes multiple features: (1) custom item arrangement for resnets, modulation, attention, and cross attention, (2) custom skip connection with concatenation, (3) time conditioning (usually used for diffusion), (4) classifier free guidance. </summary>
 
 ```py
-from typing import Sequence, Optional
+from typing import Sequence, Optional, Callable
 
 from a_unet import TimeConditioningPlugin, ClassifierFreeGuidancePlugin
 from a_unet.apex import (
