@@ -25,7 +25,7 @@ class T:
         class Inner:
             def __init__(self):
                 self.args = a
-                self.kwargs = ka
+                self.__dict__.update(**ka)
 
             def __call__(self, *b, **kb):
                 if override:
@@ -320,11 +320,11 @@ def Modulation(in_features: int, num_features: int) -> nn.Module:
     return Module([to_scale_shift, norm], forward)
 
 
-def MergeAdd(*args, **kwargs):
+def MergeAdd():
     return Module([], lambda x, y, *_: x + y)
 
 
-def MergeCat(dim: int, channels: int, **kwargs) -> nn.Module:
+def MergeCat(dim: int, channels: int) -> nn.Module:
     conv = Conv(dim=dim, in_channels=channels * 2, out_channels=channels, kernel_size=1)
     return Module([conv], lambda x, y, *_: conv(torch.cat([x, y], dim=1)))
 
