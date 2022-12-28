@@ -2,7 +2,7 @@ from typing import Callable, List, Optional, Sequence
 
 from torch import Tensor, nn
 
-from ..blocks import (
+from .blocks import (
     Attention,
     Conv,
     ConvBlock,
@@ -28,7 +28,7 @@ from ..blocks import (
 Items
 """
 
-# Selections for item forward paramters
+# Selections for item forward parameters
 SelectX = Select(lambda x, *_: (x,))
 SelectXE = Select(lambda x, f, e, *_: (x, e))
 SelectXF = Select(lambda x, f, *_: (x, f))
@@ -204,13 +204,13 @@ def FeedForwardItem(
 """ Skip Adapters """
 
 
-def SkipAdapterItem(
+def SkipAdapter(
     dim: Optional[int] = None,
     in_channels: Optional[int] = None,
     out_channels: Optional[int] = None,
     **kwargs,
 ):
-    msg = "SkipAdapterItem requires dim, in_channels, out_channels"
+    msg = "SkipAdapter requires dim, in_channels, out_channels"
     assert exists(dim) and exists(in_channels) and exists(out_channels), msg
     Item = SelectX(Conv)
     return (
@@ -228,25 +228,25 @@ def SkipAdapterItem(
 """ Skip Connections """
 
 
-def SkipAddItem(**kwargs) -> nn.Module:
+def SkipAdd(**kwargs) -> nn.Module:
     return MergeAdd()
 
 
-def SkipCatItem(
+def SkipCat(
     dim: Optional[int] = None, out_channels: Optional[int] = None, **kwargs
 ) -> nn.Module:
-    msg = "SkipCatItem requires dim, out_channels"
+    msg = "SkipCat requires dim, out_channels"
     assert exists(dim) and exists(out_channels), msg
     return MergeCat(dim=dim, channels=out_channels)
 
 
-def SkipModulateItem(
+def SkipModulate(
     dim: Optional[int] = None,
     out_channels: Optional[int] = None,
     modulation_features: Optional[int] = None,
     **kwargs,
 ) -> nn.Module:
-    msg = "SkipModulateItem requires dim, out_channels, modulation_features"
+    msg = "SkipModulate requires dim, out_channels, modulation_features"
     assert exists(dim) and exists(out_channels) and exists(modulation_features), msg
     return MergeModulate(
         dim=dim, channels=out_channels, modulation_features=modulation_features
@@ -262,8 +262,8 @@ class Block(nn.Module):
         in_channels: int,
         downsample_t: Callable = DownsampleItem,
         upsample_t: Callable = UpsampleItem,
-        skip_t: Callable = SkipAddItem,
-        skip_adapter_t: Callable = SkipAdapterItem,
+        skip_t: Callable = SkipAdd,
+        skip_adapter_t: Callable = SkipAdapter,
         items: Sequence[Callable] = [],
         items_up: Optional[Sequence[Callable]] = None,
         out_channels: Optional[int] = None,
@@ -304,13 +304,13 @@ class Block(nn.Module):
 
 
 # Block type, to be provided in UNet
-BlockT = T(Block, override=False)
+XBlock = T(Block, override=False)
 
 
 """ UNet """
 
 
-class UNet(nn.Module):
+class XUNet(nn.Module):
     def __init__(
         self,
         in_channels: int,

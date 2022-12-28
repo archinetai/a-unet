@@ -344,15 +344,6 @@ def MergeModulate(dim: int, channels: int, modulation_features: int):
     return Module([to_scale], forward)
 
 
-def rand_bool(shape: Any, proba: float, device: Any = None) -> Tensor:
-    if proba == 1:
-        return torch.ones(shape, device=device, dtype=torch.bool)
-    elif proba == 0:
-        return torch.zeros(shape, device=device, dtype=torch.bool)
-    else:
-        return torch.bernoulli(torch.full(shape, proba, device=device)).to(torch.bool)
-
-
 """
 Embedders
 """
@@ -417,6 +408,15 @@ class T5Embedder(nn.Module):
 """
 Plugins
 """
+
+
+def rand_bool(shape: Any, proba: float, device: Any = None) -> Tensor:
+    if proba == 1:
+        return torch.ones(shape, device=device, dtype=torch.bool)
+    elif proba == 0:
+        return torch.zeros(shape, device=device, dtype=torch.bool)
+    else:
+        return torch.bernoulli(torch.full(shape, proba, device=device)).to(torch.bool)
 
 
 def ClassifierFreeGuidancePlugin(

@@ -69,71 +69,72 @@ x = torch.randn(1, 8, 16, 16)
 y = unet(x) # [1, 8, 16, 16]
 ```
 
-### Attention UNet
 
-<details> <summary> (Code): A UNet generic to any dimension augmented with attention and cross attention for conditioning. </summary>
+### ApeX UNet
+
+<details> <summary> (Code): ApeX is a UNet template complete with tools for easy customizability. The following example UNet includes multiple features, including: (1) custom item arrangement for resnets, modulation, attention, and cross attention, (2) custom skip connection with concatenation, (3) time conditioning (usually used for diffusion), (4) classifier free guidance. </summary>
 
 ```py
-from typing import List
-from torch import nn
-from a_unet import T, Ts, Downsample, Upsample, ResnetBlock, Attention, FeedForward, Select, Sequential, Repeat, Packed, Skip
+from typing import Sequence, Optional
+
+from a_unet import TimeConditioningPlugin, ClassifierFreeGuidancePlugin
+from a_unet.apex import (
+    XUNet,
+    XBlock,
+    ResnetItem as R,
+    AttentionItem as A,
+    CrossAttentionItem as C,
+    FeedForwardItem as F,
+    ModulationItem as M,
+    SkipCat
+)
 
 def UNet(
     dim: int,
     in_channels: int,
-    context_features: int,
-    channels: List[int],
-    factors: List[int],
-    blocks: List[int],
-    attentions: List[int],
-    attention_heads: int,
+    channels: Sequence[int],
+    factors: Sequence[int],
+    items: Sequence[int],
+    attentions: Sequence[int],
+    cross_attentions: Sequence[int],
     attention_features: int,
-    attention_multiplier: int,
+    attention_heads: int,
+    embedding_features: Optional[int] = None,
+    skip_t: Callable = SkipCat,
+    resnet_groups: int = 8,
+    modulation_features: int = 1024,
+    embedding_max_length: int = 0,
+    use_classifier_free_guidance: bool = False,
+    out_channels: Optional[int] = None,
 ):
-    # Check that all lists have matching lengths
-    n_layers = len(channels)
-    assert all(len(xs) == n_layers for xs in (factors, blocks, attentions))
+    # Check lengths
+    num_layers = len(channels)
+    sequences = (channels, factors, items, attentions, cross_attentions)
+    assert all(len(sequence) == num_layers for sequence in sequences)
 
-    # Selects only first module input, ignores context
-    S = Select(lambda x, context: x)
+    # Define UNet type with time conditioning and CFG plugins
+    UNet = TimeConditioningPlugin(XUNet)
+    if use_classifier_free_guidance:
+        UNet = ClassifierFreeGuidancePlugin(UNet, embedding_max_length)
 
-    # Pre-initalize attention, cross-attention, and feed-forward types with parameters
-    A = T(Attention)(head_features=attention_features, num_heads=attention_heads)
-    C = T(A)(context_features=context_features) # Same as A but with context features
-    F = T(FeedForward)(multiplier=attention_multiplier)
-
-    def Stack(channels: int, n_blocks: int, n_attentions: int):
-        # Build resnet stack type
-        Block = T(ResnetBlock)(dim=dim, in_channels=channels, out_channels=channels)
-        ResnetStack = S(Repeat(Block, times=n_blocks))
-        # Build attention, cross att, and feed forward types (ignoring context in A & F)
-        Attention = T(S(A))(features=channels)
-        CrossAttention = T(C)(features=channels)
-        FeedForward = T(S(F))(features=channels)
-        # Build transformer type
-        Transformer = Ts(Sequential)(Attention, CrossAttention, FeedForward)
-        TransformerStack = Repeat(Transformer, times=n_attentions)
-        # Instantiate sequential resnet stack and transformer stack
-        return Sequential(ResnetStack(), Packed(TransformerStack()))
-
-    # Downsample and upsample types that ignore context
-    Down = T(S(Downsample))(dim=dim)
-    Up = T(S(Upsample))(dim=dim)
-
-    def Net(i: int):
-        if i == n_layers: return S(nn.Identity)()
-        n_channels = channels[i-1] if i > 0 else in_channels
-        factor = factors[i]
-
-        return Skip(torch.add)(
-            Down(factor=factor, in_channels=n_channels, out_channels=channels[i]),
-            Stack(channels=channels[i], n_blocks=blocks[i], n_attentions=attentions[i]),
-            Net(i+1),
-            Stack(channels=channels[i], n_blocks=blocks[i], n_attentions=attentions[i]),
-            Up(factor=factor, in_channels=channels[i], out_channels=n_channels)
-        )
-
-    return Net(0)
+    return UNet(
+        dim=dim,
+        in_channels=in_channels,
+        out_channels=out_channels,
+        blocks=[
+            XBlock(
+                channels=channels,
+                factor=factor,
+                items=([R, M] + [A] * n_att + [C] * n_cross) * n_items,
+            ) for channels, factor, n_items, n_att, n_cross in zip(*sequences)
+        ],
+        skip_t=skip_t,
+        attention_features=attention_features,
+        attention_heads=attention_heads,
+        embedding_features=embedding_features,
+        modulation_features=modulation_features,
+        resnet_groups=resnet_groups
+    )
 ```
 
 </details>
@@ -141,17 +142,19 @@ def UNet(
 ```py
 unet = UNet(
     dim=2,
-    in_channels=8,
-    context_features=512,
-    channels=[256, 512],
-    factors=[2, 2],
-    blocks=[2, 2],
-    attentions=[2, 2],
-    attention_heads=8,
+    in_channels=2,
+    channels=[128, 256, 512, 1024],
+    factors=[2, 2, 2, 2],
+    items=[2, 2, 2, 2],
+    attentions=[0, 0, 0, 1],
+    cross_attentions=[1, 1, 1, 1],
     attention_features=64,
-    attention_multiplier=4,
+    attention_heads=8,
+    embedding_features=768,
+    use_classifier_free_guidance=False
 )
-x = torch.randn(1, 8, 16, 16)
-context = torch.randn(1, 256, 512)
-y = unet(x, context) # [1, 8, 16, 16]
+x = torch.randn(2, 2, 64, 64)
+time = [0.2, 0.5]
+embedding = torch.randn(2, 512, 768)
+y = unet(x, time=time, embedding=embedding) # [2, 2, 64, 64]
 ```
