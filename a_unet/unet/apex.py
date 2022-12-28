@@ -42,7 +42,7 @@ def DownsampleItem(
     factor: Optional[int] = None,
     in_channels: Optional[int] = None,
     channels: Optional[int] = None,
-    **kwargs
+    **kwargs,
 ) -> nn.Module:
     msg = "DownsampleItem requires dim, factor, in_channels, channels"
     assert (
@@ -59,7 +59,7 @@ def UpsampleItem(
     factor: Optional[int] = None,
     channels: Optional[int] = None,
     out_channels: Optional[int] = None,
-    **kwargs
+    **kwargs,
 ) -> nn.Module:
     msg = "UpsampleItem requires dim, factor, channels, out_channels"
     assert (
@@ -78,7 +78,7 @@ def ResnetItem(
     dim: Optional[int] = None,
     channels: Optional[int] = None,
     resnet_groups: Optional[int] = None,
-    **kwargs
+    **kwargs,
 ) -> nn.Module:
     msg = "ResnetItem requires dim, channels, and resnet_groups"
     assert exists(dim) and exists(channels) and exists(resnet_groups), msg
@@ -93,7 +93,7 @@ def AttentionItem(
     channels: Optional[int] = None,
     attention_features: Optional[int] = None,
     attention_heads: Optional[int] = None,
-    **kwargs
+    **kwargs,
 ) -> nn.Module:
     msg = "AttentionItem requires channels, attention_features, attention_heads"
     assert (
@@ -114,7 +114,7 @@ def CrossAttentionItem(
     attention_features: Optional[int] = None,
     attention_heads: Optional[int] = None,
     embedding_features: Optional[int] = None,
-    **kwargs
+    **kwargs,
 ) -> nn.Module:
     msg = "CrossAttentionItem requires channels, embedding_features, attention_*"
     assert (
@@ -149,7 +149,7 @@ def LinearAttentionItem(
     channels: Optional[int] = None,
     attention_features: Optional[int] = None,
     attention_heads: Optional[int] = None,
-    **kwargs
+    **kwargs,
 ) -> nn.Module:
     msg = "LinearAttentionItem requires attention_features and attention_heads"
     assert (
@@ -170,7 +170,7 @@ def LinearCrossAttentionItem(
     attention_features: Optional[int] = None,
     attention_heads: Optional[int] = None,
     embedding_features: Optional[int] = None,
-    **kwargs
+    **kwargs,
 ) -> nn.Module:
     msg = "LinearCrossAttentionItem requires channels, embedding_features, attention_*"
     assert (
@@ -208,7 +208,7 @@ def SkipAdapterItem(
     dim: Optional[int] = None,
     in_channels: Optional[int] = None,
     out_channels: Optional[int] = None,
-    **kwargs
+    **kwargs,
 ):
     msg = "SkipAdapterItem requires dim, in_channels, out_channels"
     assert exists(dim) and exists(in_channels) and exists(out_channels), msg
@@ -244,7 +244,7 @@ def SkipModulateItem(
     dim: Optional[int] = None,
     out_channels: Optional[int] = None,
     modulation_features: Optional[int] = None,
-    **kwargs
+    **kwargs,
 ) -> nn.Module:
     msg = "SkipModulateItem requires dim, out_channels, modulation_features"
     assert exists(dim) and exists(out_channels) and exists(modulation_features), msg
@@ -268,7 +268,7 @@ class Block(nn.Module):
         items_up: Optional[Sequence[Callable]] = None,
         out_channels: Optional[int] = None,
         inner_block: Optional[nn.Module] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         out_channels = default(out_channels, in_channels)
@@ -316,7 +316,7 @@ class UNet(nn.Module):
         in_channels: int,
         blocks: Sequence,
         out_channels: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         num_layers = len(blocks)
@@ -330,7 +330,11 @@ class UNet(nn.Module):
             out_ch = out_channels if i == 0 else in_ch
 
             return block_t(
-                in_channels=in_ch, out_channels=out_ch, inner_block=Net(i + 1), **kwargs
+                in_channels=in_ch,
+                out_channels=out_ch,
+                depth=i,
+                inner_block=Net(i + 1),
+                **kwargs,
             )
 
         self.net = Net(0)
@@ -338,6 +342,7 @@ class UNet(nn.Module):
     def forward(
         self,
         x: Tensor,
+        *,
         features: Optional[Tensor] = None,
         embedding: Optional[Tensor] = None,
         channels: Optional[Sequence[Tensor]] = None,

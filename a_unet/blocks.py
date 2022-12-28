@@ -1,7 +1,9 @@
+from math import pi
 from typing import Any, Callable, Optional, Sequence, Type, TypeVar, Union
 
 import torch
-from einops import pack, rearrange, repeat, unpack
+import torch.nn.functional as F
+from einops import pack, rearrange, reduce, repeat, unpack
 from torch import Tensor, einsum, nn
 from typing_extensions import TypeGuard
 
@@ -351,13 +353,79 @@ def rand_bool(shape: Any, proba: float, device: Any = None) -> Tensor:
         return torch.bernoulli(torch.full(shape, proba, device=device)).to(torch.bool)
 
 
-def CFG(
+"""
+Embedders
+"""
+
+
+class NumberEmbedder(nn.Module):
+    def __init__(self, features: int, dim: int = 256):
+        super().__init__()
+        assert dim % 2 == 0, f"dim must be divisible by 2, found {dim}"
+        self.features = features
+        self.weights = nn.Parameter(torch.randn(dim // 2))
+        self.to_out = nn.Linear(in_features=dim + 1, out_features=features)
+
+    def to_embedding(self, x: Tensor) -> Tensor:
+        x = rearrange(x, "b -> b 1")
+        freqs = x * rearrange(self.weights, "d -> 1 d") * 2 * pi
+        fouriered = torch.cat((freqs.sin(), freqs.cos()), dim=-1)
+        fouriered = torch.cat((x, fouriered), dim=-1)
+        return self.to_out(fouriered)
+
+    def forward(self, x: Union[Sequence[float], Tensor]) -> Tensor:
+        if not torch.is_tensor(x):
+            x = torch.tensor(x, device=self.weights.device)
+        assert isinstance(x, Tensor)
+        shape = x.shape
+        x = rearrange(x, "... -> (...)")
+        return self.to_embedding(x).view(*shape, self.features)  # type: ignore
+
+
+class T5Embedder(nn.Module):
+    def __init__(self, model: str = "t5-base", max_length: int = 64):
+        super().__init__()
+        from transformers import AutoTokenizer, T5EncoderModel
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model)
+        self.transformer = T5EncoderModel.from_pretrained(model)
+        self.max_length = max_length
+
+    @torch.no_grad()
+    def forward(self, texts: Sequence[str]) -> Tensor:
+        encoded = self.tokenizer(
+            texts,
+            truncation=True,
+            max_length=self.max_length,
+            padding="max_length",
+            return_tensors="pt",
+        )
+
+        device = next(self.transformer.parameters()).device
+        input_ids = encoded["input_ids"].to(device)
+        attention_mask = encoded["attention_mask"].to(device)
+
+        self.transformer.eval()
+
+        embedding = self.transformer(
+            input_ids=input_ids, attention_mask=attention_mask
+        )["last_hidden_state"]
+
+        return embedding
+
+
+"""
+Plugins
+"""
+
+
+def ClassifierFreeGuidancePlugin(
     net_t: Type[nn.Module],
     embedding_max_length: int,
 ) -> Callable[..., nn.Module]:
     """Classifier-Free Guidance -> CFG(UNet, embedding_max_length=512)(...)"""
 
-    def CFGNet(embedding_features: int, **kwargs) -> nn.Module:
+    def Net(embedding_features: int, **kwargs) -> nn.Module:
         fixed_embedding = FixedEmbedding(
             max_length=embedding_max_length,
             features=embedding_features,
@@ -371,7 +439,8 @@ def CFG(
             embedding_mask_proba: float = 0.0,
             **kwargs,
         ):
-            assert exists(embedding), "embedding required when using CFG"
+            msg = "ClassiferFreeGuidancePlugin requires embedding"
+            assert exists(embedding), msg
             b, device = embedding.shape[0], embedding.device
             embedding_mask = fixed_embedding(embedding)
 
@@ -393,4 +462,46 @@ def CFG(
 
         return Module([fixed_embedding, net], forward)
 
-    return CFGNet
+    return Net
+
+
+def TimeConditioningPlugin(
+    net_t: Type[nn.Module],
+    num_layers: int = 2,
+) -> Callable[..., nn.Module]:
+    """Adds time conditioning (e.g. for diffusion)"""
+
+    def Net(modulation_features: Optional[int] = None, **kwargs) -> nn.Module:
+        msg = "TimeConditioningPlugin requires modulation_features"
+        assert exists(modulation_features), msg
+
+        embedder = NumberEmbedder(features=modulation_features)
+        mlp = Repeat(
+            nn.Sequential(
+                nn.Linear(modulation_features, modulation_features), nn.GELU()
+            ),
+            times=num_layers,
+        )
+        net = net_t(modulation_features=modulation_features, **kwargs)  # type: ignore
+
+        def forward(
+            x: Tensor,
+            time: Optional[Tensor] = None,
+            features: Optional[Tensor] = None,
+            **kwargs,
+        ):
+            msg = "TimeConditioningPlugin requires time in forward"
+            assert exists(time), msg
+            # Process time to time_features
+            time_features = F.gelu(embedder(time))
+            time_features = mlp(time_features)
+            # Overlap features if more than one per batch
+            if time_features.ndim == 3:
+                time_features = reduce(time_features, "b n d -> b d", "sum")
+            # Merge time features with features if provided
+            features = features + time_features if exists(features) else time_features
+            return net(x, features=features, **kwargs)
+
+        return Module([embedder, mlp, net], forward)
+
+    return Net

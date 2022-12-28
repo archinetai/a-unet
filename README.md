@@ -1,6 +1,6 @@
 # A-UNet
 
-A toolbox that provides hackable building blocks for (1D/2D/3D) UNets, in PyTorch.
+A toolbox that provides hackable building blocks for generic 1D/2D/3D UNets, in PyTorch.
 
 ## Install
 ```bash
