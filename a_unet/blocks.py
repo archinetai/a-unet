@@ -12,9 +12,28 @@ Helper functions
 """
 
 
-def T(t: Callable[..., V]) -> Callable[..., Callable[..., V]]:
+class T:
     """Where the magic happens, builds a type template for a given type"""
-    return lambda *a, **ka: lambda *b, **kb: t(*(*a, *b), **{**ka, **kb})
+
+    def __init__(self, t: Callable, override: bool = True):
+        self.t = t
+        self.override = override
+
+    def __call__(self, *a, **ka):
+        t, override = self.t, self.override
+
+        class Inner:
+            def __init__(self):
+                self.args = a
+                self.kwargs = ka
+
+            def __call__(self, *b, **kb):
+                if override:
+                    return t(*(*a, *b), **{**ka, **kb})
+                else:
+                    return t(*(*b, *a), **{**kb, **ka})
+
+        return Inner()
 
 
 def Ts(t: Callable[..., V]) -> Callable[..., Callable[..., V]]:
@@ -68,7 +87,7 @@ def Select(args_fn: Callable) -> Callable[..., Type[nn.Module]]:
                 self.args_fn = args_fn
 
             def forward(self, *args, **kwargs):
-                return self.block(args_fn(*args), **kwargs)
+                return self.block(*args_fn(*args), **kwargs)
 
         return Select
 
@@ -273,6 +292,10 @@ class Attention(nn.Module):
         return skip + self.attention(q, k, v)
 
 
+def CrossAttention(context_features: int, **kwargs):
+    return Attention(context_features=context_features, **kwargs)
+
+
 def FeedForward(features: int, multiplier: int) -> nn.Module:
     mid_features = features * multiplier
     return Skip(torch.add)(
@@ -280,6 +303,43 @@ def FeedForward(features: int, multiplier: int) -> nn.Module:
         nn.GELU(),
         nn.Linear(in_features=mid_features, out_features=features),
     )
+
+
+def Modulation(in_features: int, num_features: int) -> nn.Module:
+    to_scale_shift = nn.Sequential(
+        nn.SiLU(),
+        nn.Linear(in_features=num_features, out_features=in_features * 2, bias=True),
+    )
+    norm = nn.LayerNorm(in_features, elementwise_affine=False, eps=1e-6)
+
+    def forward(x: Tensor, features: Tensor) -> Tensor:
+        scale_shift = to_scale_shift(features)
+        scale, shift = rearrange(scale_shift, "b d -> b 1 d").chunk(2, dim=-1)
+        return norm(x) * (1 + scale) + shift
+
+    return Module([to_scale_shift, norm], forward)
+
+
+def MergeAdd(*args, **kwargs):
+    return Module([], lambda x, y, *_: x + y)
+
+
+def MergeCat(dim: int, channels: int, **kwargs) -> nn.Module:
+    conv = Conv(dim=dim, in_channels=channels * 2, out_channels=channels, kernel_size=1)
+    return Module([conv], lambda x, y, *_: conv(torch.cat([x, y], dim=1)))
+
+
+def MergeModulate(dim: int, channels: int, modulation_features: int):
+    to_scale = nn.Sequential(
+        nn.SiLU(),
+        nn.Linear(in_features=modulation_features, out_features=channels, bias=True),
+    )
+
+    def forward(x: Tensor, y: Tensor, features: Tensor, *args) -> Tensor:
+        scale = rearrange(to_scale(features), f'b c -> b c {"1 " * dim}')
+        return x + scale * y
+
+    return Module([to_scale], forward)
 
 
 def rand_bool(shape: Any, proba: float, device: Any = None) -> Tensor:
