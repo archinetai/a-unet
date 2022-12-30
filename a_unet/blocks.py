@@ -381,6 +381,7 @@ class T5Embedder(nn.Module):
         self.tokenizer = AutoTokenizer.from_pretrained(model)
         self.transformer = T5EncoderModel.from_pretrained(model)
         self.max_length = max_length
+        self.embedding_features = self.transformer.config.d_model
 
     @torch.no_grad()
     def forward(self, texts: Sequence[str]) -> Tensor:
@@ -503,5 +504,31 @@ def TimeConditioningPlugin(
             return net(x, features=features, **kwargs)
 
         return Module([embedder, mlp, net], forward)
+
+    return Net
+
+
+def TextConditioningPlugin(
+    net_t: Type[nn.Module], embedder: nn.Module = T5Embedder()
+) -> Callable[..., nn.Module]:
+    """Adds time conditioning (e.g. for diffusion)"""
+    msg = "TextConditioningPlugin embedder requires embedding_features attribute"
+    assert hasattr(embedder, "embedding_features"), msg
+    features: int = embedder.embedding_features  # type: ignore
+
+    def Net(embedding_features: int = features, **kwargs) -> nn.Module:
+        msg = f"TextConditioningPlugin requires embedding_features={features} "
+        assert embedding_features == features, msg
+        net = net_t(embedding_features=embedding_features, **kwargs)  # type: ignore
+
+        def forward(
+            x: Tensor, text: Sequence[str], embedding: Optional[Tensor] = None, **kwargs
+        ):
+            text_embedding = embedder(text)
+            if exists(embedding):
+                text_embedding = torch.cat([text_embedding, embedding], dim=1)
+            return net(x, embedding=text_embedding, **kwargs)
+
+        return Module([embedder, net], forward)
 
     return Net
