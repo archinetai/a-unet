@@ -1,5 +1,6 @@
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, List, Optional, Sequence, no_type_check
 
+import torch
 from torch import Tensor, nn
 
 from .blocks import (
@@ -14,6 +15,7 @@ from .blocks import (
     MergeCat,
     MergeModulate,
     Modulation,
+    Module,
     Packed,
     ResnetBlock,
     Select,
@@ -30,8 +32,9 @@ Items
 
 # Selections for item forward parameters
 SelectX = Select(lambda x, *_: (x,))
-SelectXE = Select(lambda x, f, e, *_: (x, e))
 SelectXF = Select(lambda x, f, *_: (x, f))
+SelectXE = Select(lambda x, f, e, *_: (x, e))
+SelectXC = Select(lambda x, f, e, c, *_: (x, c))
 
 
 """ Downsample / Upsample """
@@ -199,6 +202,40 @@ def FeedForwardItem(
     return Packed(
         Item(features=channels, multiplier=attention_multiplier)  # type: ignore
     )
+
+
+def InjectChannelsItem(
+    dim: Optional[int] = None,
+    channels: Optional[int] = None,
+    depth: Optional[int] = None,
+    context_channels: Optional[int] = None,
+    **kwargs,
+) -> nn.Module:
+    msg = "InjectChannelsItem requires dim, depth, channels, context_channels"
+    assert (
+        exists(dim) and exists(depth) and exists(channels) and exists(context_channels)
+    ), msg
+    msg = "InjectChannelsItem requires context_channels > 0"
+    assert context_channels > 0, msg
+
+    conv = Conv(
+        dim=dim,
+        in_channels=channels + context_channels,
+        out_channels=channels,
+        kernel_size=1,
+    )
+
+    @no_type_check
+    def forward(x: Tensor, channels: Sequence[Optional[Tensor]]) -> Tensor:
+        msg_ = f"context `channels` at depth {depth} in forward"
+        assert depth < len(channels), f"Required {msg_}"
+        context = channels[depth]
+        shape = torch.Size([x.shape[0], context_channels, *x.shape[2:]])
+        msg = f"Required {msg_} to be tensor of shape {list(shape)}"
+        assert torch.is_tensor(context) and context.shape == shape, msg
+        return conv(torch.cat([x, context], dim=1)) + x
+
+    return SelectXC(Module)([conv], forward)  # type: ignore
 
 
 """ Skip Adapters """

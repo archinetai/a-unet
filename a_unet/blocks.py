@@ -517,7 +517,7 @@ def TextConditioningPlugin(
     features: int = embedder.embedding_features  # type: ignore
 
     def Net(embedding_features: int = features, **kwargs) -> nn.Module:
-        msg = f"TextConditioningPlugin requires embedding_features={features} "
+        msg = f"TextConditioningPlugin requires embedding_features={features}"
         assert embedding_features == features, msg
         net = net_t(embedding_features=embedding_features, **kwargs)  # type: ignore
 
