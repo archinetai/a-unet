@@ -326,9 +326,9 @@ def MergeAdd():
     return Module([], lambda x, y, *_: x + y)
 
 
-def MergeCat(dim: int, channels: int) -> nn.Module:
+def MergeCat(dim: int, channels: int, scale: float = 2**-0.5) -> nn.Module:
     conv = Conv(dim=dim, in_channels=channels * 2, out_channels=channels, kernel_size=1)
-    return Module([conv], lambda x, y, *_: conv(torch.cat([x, y], dim=1)))
+    return Module([conv], lambda x, y, *_: conv(torch.cat([x * scale, y], dim=1)))
 
 
 def MergeModulate(dim: int, channels: int, modulation_features: int):
@@ -509,9 +509,10 @@ def TimeConditioningPlugin(
 
 
 def TextConditioningPlugin(
-    net_t: Type[nn.Module], embedder: nn.Module = T5Embedder()
+    net_t: Type[nn.Module], embedder: Optional[nn.Module] = None
 ) -> Callable[..., nn.Module]:
-    """Adds time conditioning (e.g. for diffusion)"""
+    """Adds text conditioning"""
+    embedder = embedder if exists(embedder) else T5Embedder()
     msg = "TextConditioningPlugin embedder requires embedding_features attribute"
     assert hasattr(embedder, "embedding_features"), msg
     features: int = embedder.embedding_features  # type: ignore
@@ -524,11 +525,11 @@ def TextConditioningPlugin(
         def forward(
             x: Tensor, text: Sequence[str], embedding: Optional[Tensor] = None, **kwargs
         ):
-            text_embedding = embedder(text)
+            text_embedding = embedder(text)  # type: ignore
             if exists(embedding):
                 text_embedding = torch.cat([text_embedding, embedding], dim=1)
             return net(x, embedding=text_embedding, **kwargs)
 
-        return Module([embedder, net], forward)
+        return Module([embedder, net], forward)  # type: ignore
 
     return Net

@@ -231,7 +231,7 @@ def InjectChannelsItem(
         assert depth < len(channels), f"Required {msg_}"
         context = channels[depth]
         shape = torch.Size([x.shape[0], context_channels, *x.shape[2:]])
-        msg = f"Required {msg_} to be tensor of shape {list(shape)}"
+        msg = f"Required {msg_} to be tensor of shape {shape}, found {context.shape}"
         assert torch.is_tensor(context) and context.shape == shape, msg
         return conv(torch.cat([x, context], dim=1)) + x
 
@@ -270,11 +270,14 @@ def SkipAdd(**kwargs) -> nn.Module:
 
 
 def SkipCat(
-    dim: Optional[int] = None, out_channels: Optional[int] = None, **kwargs
+    dim: Optional[int] = None,
+    out_channels: Optional[int] = None,
+    skip_scale: float = 2**-0.5,
+    **kwargs,
 ) -> nn.Module:
     msg = "SkipCat requires dim, out_channels"
     assert exists(dim) and exists(out_channels), msg
-    return MergeCat(dim=dim, channels=out_channels)
+    return MergeCat(dim=dim, channels=out_channels, scale=skip_scale)
 
 
 def SkipModulate(
