@@ -7,6 +7,7 @@ from .blocks import (
     Attention,
     Conv,
     ConvBlock,
+    ConvNextV2Block,
     CrossAttention,
     Downsample,
     FeedForward,
@@ -90,6 +91,17 @@ def ResnetItem(
     return Item(
         dim=dim, in_channels=channels, out_channels=channels, conv_block_t=conv_block_t
     )  # type: ignore
+
+
+def ConvNextV2Item(
+    dim: Optional[int] = None,
+    channels: Optional[int] = None,
+    **kwargs,
+) -> nn.Module:
+    msg = "ResnetItem requires dim and channels"
+    assert exists(dim) and exists(channels), msg
+    Item = SelectX(ConvNextV2Block)
+    return Item(dim=dim, channels=channels)  # type: ignore
 
 
 def AttentionItem(
