@@ -184,6 +184,51 @@ def ResnetBlock(
     return Module([conv_block, conv], lambda x: conv_block(x) + conv(x))
 
 
+class GRN(nn.Module):
+    """GRN (Global Response Normalization) layer from ConvNextV2 generic to any dim"""
+
+    def __init__(self, dim: int, channels: int):
+        super().__init__()
+        ones = (1,) * dim
+        self.gamma = nn.Parameter(torch.zeros(1, channels, *ones))
+        self.beta = nn.Parameter(torch.zeros(1, channels, *ones))
+        self.norm_dims = [d + 2 for d in range(dim)]
+
+    def forward(self, x: Tensor) -> Tensor:
+        Gx = torch.norm(x, p=2, dim=self.norm_dims, keepdim=True)
+        Nx = Gx / (Gx.mean(dim=1, keepdim=True) + 1e-6)
+        return self.gamma * (x * Nx) + self.beta + x
+
+
+def ConvNextV2Block(dim: int, channels: int) -> nn.Module:
+    block = nn.Sequential(
+        # Depthwise and LayerNorm
+        Conv(
+            dim=dim,
+            in_channels=channels,
+            out_channels=channels,
+            kernel_size=7,
+            padding=3,
+            groups=channels,
+        ),
+        nn.GroupNorm(num_groups=1, num_channels=channels),
+        # Pointwise expand
+        Conv(dim=dim, in_channels=channels, out_channels=channels * 4, kernel_size=1),
+        # Activation and GRN
+        nn.GELU(),
+        GRN(dim=dim, channels=channels * 4),
+        # Pointwise contract
+        Conv(
+            dim=dim,
+            in_channels=channels * 4,
+            out_channels=channels,
+            kernel_size=1,
+        ),
+    )
+
+    return Module([block], lambda x: x + block(x))
+
+
 def AttentionBase(features: int, head_features: int, num_heads: int) -> nn.Module:
     mid_features = head_features * num_heads
     to_out = nn.Linear(in_features=mid_features, out_features=features, bias=False)
