@@ -11,7 +11,7 @@ setup(
     author_email="archinetai@protonmail.com",
     url="https://github.com/archinetai/a-unet",
     keywords=["artificial intelligence", "deep learning"],
-    install_requires=["torch>=1.6", "data-science-types>=0.2", "einops>=0.6.0"],
+    install_requires=["torch>=1.6", "data-science-types>=0.2", "einops>=0.6.0", "xformers>=0.0.13"],
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
