@@ -7,7 +7,6 @@ from einops import pack, rearrange, reduce, repeat, unpack
 from torch import Tensor, einsum, nn
 from typing_extensions import TypeGuard
 from . import config
-from functools import partial
 
 V = TypeVar("V")
 
@@ -126,12 +125,10 @@ class Tiled(Sequential):
     ) -> Tensor:
         t = int(x.shape[2] / self.tile_size)
         x = rearrange(x, "b c (t k) -> (b t) c k", k=self.tile_size)
-        x = super().forward(
-            x,
-            f,
-            context.repeat_interleave(t, dim=0) if not context is None else None,
-            *args,
-        )
+        if not context is None:
+            x = super().forward(x, f, context.repeat_interleave(t, dim=0), *args)
+        else:
+            x = super().forward(x, *args)
         x = rearrange(x, "(b t) c k -> b c (t k)", t=t)
         return x
 

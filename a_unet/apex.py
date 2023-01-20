@@ -205,6 +205,7 @@ def LinearCrossAttentionItem(
         )
     )
 
+
 def TiledAttentionItem(
     channels: Optional[int] = None,
     attention_features: Optional[int] = None,
@@ -213,17 +214,16 @@ def TiledAttentionItem(
     **kwargs,
 ) -> nn.Module:
     msg = "TiledAttentionItem requires tile_size"
-    assert (
-        exists(tile_size)
-    ), msg
+    assert exists(tile_size), msg
     return Tiled(
         tile_size,
         AttentionItem(  # type: ignore
             channels=channels,
             attention_features=attention_features,
             attention_heads=attention_heads,
-        )
+        ),
     )
+
 
 def TiledCrossAttentionItem(
     channels: Optional[int] = None,
@@ -234,9 +234,7 @@ def TiledCrossAttentionItem(
     **kwargs,
 ) -> nn.Module:
     msg = "TiledCrossAttentionItem requires tile_size"
-    assert (
-        exists(tile_size)
-    ), msg
+    assert exists(tile_size), msg
     return Tiled(
         tile_size,
         CrossAttentionItem(  # type: ignore
@@ -244,8 +242,9 @@ def TiledCrossAttentionItem(
             attention_features=attention_features,
             attention_heads=attention_heads,
             embedding_features=embedding_features,
-        )
+        ),
     )
+
 
 def FeedForwardItem(
     channels: Optional[int] = None, attention_multiplier: Optional[int] = None, **kwargs
