@@ -7,6 +7,7 @@ from einops import pack, rearrange, reduce, repeat, unpack
 from torch import Tensor, einsum, nn
 from typing_extensions import TypeGuard
 from . import config
+from functools import partial
 
 V = TypeVar("V")
 
@@ -106,6 +107,32 @@ class Packed(Sequential):
         x = super().forward(x, *args)
         x = rearrange(x, "b n d -> b d n")
         x = unpack(x, ps, "b d *")[0]
+        return x
+
+
+class Tiled(Sequential):
+    """Splits samples time-wise into multiple smaller samples, useful for tiling attention"""
+
+    def __init__(self, tile_size: int, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tile_size = tile_size
+
+    def forward(
+        self,
+        x: Tensor,
+        f: Optional[Tensor] = None,
+        context: Optional[Tensor] = None,
+        *args,
+    ) -> Tensor:
+        t = int(x.shape[2] / self.tile_size)
+        x = rearrange(x, "b c (t k) -> (b t) c k", k=self.tile_size)
+        x = super().forward(
+            x,
+            f,
+            context.repeat_interleave(t, dim=0) if not context is None else None,
+            *args,
+        )
+        x = rearrange(x, "(b t) c k -> b c (t k)", t=t)
         return x
 
 
@@ -245,7 +272,9 @@ def AttentionBase(features: int, head_features: int, num_heads: int) -> nn.Modul
         else:
             h = num_heads
             # Split heads
-            q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=h), (q, k, v))
+            q, k, v = map(
+                lambda t: rearrange(t, "b n (h d) -> b h n d", h=h), (q, k, v)
+            )
             # Compute similarity matrix and add eventual mask
             sim = einsum("... n d, ... m d -> ... n m", q, k) * scale
             # Get attention matrix with softmax
