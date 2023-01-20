@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from einops import pack, rearrange, reduce, repeat, unpack
 from torch import Tensor, einsum, nn
 from typing_extensions import TypeGuard
+from . import config
 
 V = TypeVar("V")
 
@@ -231,20 +232,27 @@ def AttentionBase(features: int, head_features: int, num_heads: int) -> nn.Modul
     scale = head_features**-0.5
     mid_features = head_features * num_heads
     to_out = nn.Linear(in_features=mid_features, out_features=features, bias=False)
+    if config.use_flash_attention:
+        import xformers
+        import xformers.ops
 
     def forward(
         q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None
     ) -> Tensor:
-        h = num_heads
-        # Split heads
-        q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=h), (q, k, v))
-        # Compute similarity matrix and add eventual mask
-        sim = einsum("... n d, ... m d -> ... n m", q, k) * scale
-        # Get attention matrix with softmax
-        attn = sim.softmax(dim=-1)
-        # Compute values
-        out = einsum("... n m, ... m d -> ... n d", attn, v)
-        out = rearrange(out, "b h n d -> b n (h d)")
+        if config.use_flash_attention:
+            # Use memory efficient attention
+            out = xformers.ops.memory_efficient_attention(q, k, v)
+        else:
+            h = num_heads
+            # Split heads
+            q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=h), (q, k, v))
+            # Compute similarity matrix and add eventual mask
+            sim = einsum("... n d, ... m d -> ... n m", q, k) * scale
+            # Get attention matrix with softmax
+            attn = sim.softmax(dim=-1)
+            # Compute values
+            out = einsum("... n m, ... m d -> ... n d", attn, v)
+            out = rearrange(out, "b h n d -> b n (h d)")
         return to_out(out)
 
     return Module([to_out], forward)

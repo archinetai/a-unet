@@ -157,3 +157,14 @@ time = [0.2, 0.5]
 embedding = torch.randn(2, 512, 768)
 y = unet(x, time=time, embedding=embedding) # [2, 2, 64, 64]
 ```
+
+
+### Flash Attention
+
+To enable flash attention, first install the latest xformers as described [here](https://github.com/facebookresearch/xformers#installing-xformers). After, set the `use_flash_attention` variable in `config`:
+
+```python
+from a_unet import config
+
+config.use_flash_attention = True
+```
