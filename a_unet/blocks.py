@@ -133,16 +133,57 @@ def Conv(dim: int, *args, **kwargs) -> nn.Module:
     return [nn.Conv1d, nn.Conv2d, nn.Conv3d][dim - 1](*args, **kwargs)
 
 
-def Downsample(dim: int, factor: int = 2, conv_t=Conv, **kwargs) -> nn.Module:
-    return conv_t(dim=dim, kernel_size=factor, stride=factor, **kwargs)
+def ConvTranspose(dim: int, *args, **kwargs) -> nn.Module:
+    return [nn.ConvTranspose1d, nn.ConvTranspose2d, nn.ConvTranspose3d][dim - 1](
+        *args, **kwargs
+    )
+
+
+def Downsample(
+    dim: int, factor: int = 2, width: int = 1, conv_t=Conv, **kwargs
+) -> nn.Module:
+    width = width if factor > 1 else 1
+    return conv_t(
+        dim=dim,
+        kernel_size=factor * width,
+        stride=factor,
+        padding=(factor * width - factor) // 2,
+        **kwargs,
+    )
 
 
 def Upsample(
-    dim: int, factor: int = 2, mode: str = "nearest", conv_t=Conv, **kwargs
+    dim: int,
+    factor: int = 2,
+    width: int = 1,
+    conv_t=Conv,
+    conv_tranpose_t=ConvTranspose,
+    **kwargs,
 ) -> nn.Module:
+    width = width if factor > 1 else 1
+    return conv_tranpose_t(
+        dim=dim,
+        kernel_size=factor * width,
+        stride=factor,
+        padding=(factor * width - factor) // 2,
+        **kwargs,
+    )
+
+
+def UpsampleInterpolate(
+    dim: int,
+    factor: int = 2,
+    kernel_size: int = 3,
+    mode: str = "nearest",
+    conv_t=Conv,
+    **kwargs,
+) -> nn.Module:
+    assert kernel_size % 2 == 1, "upsample kernel size must be odd"
     return nn.Sequential(
-        nn.Upsample(scale_factor=factor, mode="nearest"),
-        conv_t(dim=dim, kernel_size=3, padding=1, **kwargs),
+        nn.Upsample(scale_factor=factor, mode=mode),
+        conv_t(
+            dim=dim, kernel_size=kernel_size, padding=(kernel_size - 1) // 2, **kwargs
+        ),
     )
 
 
@@ -165,10 +206,14 @@ def ResnetBlock(
     dim: int,
     in_channels: int,
     out_channels: int,
+    kernel_size: int = 3,
     conv_block_t=ConvBlock,
     conv_t=Conv,
+    **kwargs,
 ) -> nn.Module:
-    ConvBlock = T(conv_block_t)(dim=dim, kernel_size=3, padding=1)
+    ConvBlock = T(conv_block_t)(
+        dim=dim, kernel_size=kernel_size, padding=(kernel_size - 1) // 2, **kwargs
+    )
     Conv = T(conv_t)(dim=dim, kernel_size=1)
 
     conv_block = Sequential(

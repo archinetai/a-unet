@@ -23,6 +23,7 @@ from .blocks import (
     Sequential,
     T,
     Upsample,
+    UpsampleInterpolate,
     default,
     exists,
 )
@@ -46,6 +47,7 @@ def DownsampleItem(
     factor: Optional[int] = None,
     in_channels: Optional[int] = None,
     channels: Optional[int] = None,
+    downsample_width: int = 1,
     **kwargs,
 ) -> nn.Module:
     msg = "DownsampleItem requires dim, factor, in_channels, channels"
@@ -54,7 +56,11 @@ def DownsampleItem(
     ), msg
     Item = SelectX(Downsample)
     return Item(  # type: ignore
-        dim=dim, factor=factor, in_channels=in_channels, out_channels=channels
+        dim=dim,
+        factor=factor,
+        width=downsample_width,
+        in_channels=in_channels,
+        out_channels=channels,
     )
 
 
@@ -63,16 +69,34 @@ def UpsampleItem(
     factor: Optional[int] = None,
     channels: Optional[int] = None,
     out_channels: Optional[int] = None,
+    upsample_mode: str = "nearest",
+    upsample_kernel_size: int = 3,  # Used with upsample_mode != "transpose"
+    upsample_width: int = 1,  # Used with upsample_mode == "transpose"
     **kwargs,
 ) -> nn.Module:
     msg = "UpsampleItem requires dim, factor, channels, out_channels"
     assert (
         exists(dim) and exists(factor) and exists(channels) and exists(out_channels)
     ), msg
-    Item = SelectX(Upsample)
-    return Item(  # type: ignore
-        dim=dim, factor=factor, in_channels=channels, out_channels=out_channels
-    )
+    if upsample_mode == "transpose":
+        Item = SelectX(Upsample)
+        return Item(  # type: ignore
+            dim=dim,
+            factor=factor,
+            width=upsample_width,
+            in_channels=channels,
+            out_channels=out_channels,
+        )
+    else:
+        Item = SelectX(UpsampleInterpolate)
+        return Item(  # type: ignore
+            dim=dim,
+            factor=factor,
+            mode=upsample_mode,
+            kernel_size=upsample_kernel_size,
+            in_channels=channels,
+            out_channels=out_channels,
+        )
 
 
 """ Main """
@@ -82,15 +106,20 @@ def ResnetItem(
     dim: Optional[int] = None,
     channels: Optional[int] = None,
     resnet_groups: Optional[int] = None,
+    resnet_kernel_size: int = 3,
     **kwargs,
 ) -> nn.Module:
     msg = "ResnetItem requires dim, channels, and resnet_groups"
     assert exists(dim) and exists(channels) and exists(resnet_groups), msg
     Item = SelectX(ResnetBlock)
     conv_block_t = T(ConvBlock)(norm_t=T(nn.GroupNorm)(num_groups=resnet_groups))
-    return Item(
-        dim=dim, in_channels=channels, out_channels=channels, conv_block_t=conv_block_t
-    )  # type: ignore
+    return Item(  # type: ignore
+        dim=dim,
+        in_channels=channels,
+        out_channels=channels,
+        kernel_size=resnet_kernel_size,
+        conv_block_t=conv_block_t,
+    )
 
 
 def ConvNextV2Item(
