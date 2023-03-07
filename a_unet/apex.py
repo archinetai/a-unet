@@ -18,6 +18,7 @@ from .blocks import (
     Modulation,
     Module,
     Packed,
+    Tiled,
     ResnetBlock,
     Select,
     Sequential,
@@ -231,6 +232,46 @@ def LinearCrossAttentionItem(
             num_heads=attention_heads,
             context_features=embedding_features,
         )
+    )
+
+
+def TiledAttentionItem(
+    channels: Optional[int] = None,
+    attention_features: Optional[int] = None,
+    attention_heads: Optional[int] = None,
+    tile_size: Optional[int] = None,
+    **kwargs,
+) -> nn.Module:
+    msg = "TiledAttentionItem requires tile_size"
+    assert exists(tile_size), msg
+    return Tiled(
+        tile_size,
+        AttentionItem(  # type: ignore
+            channels=channels,
+            attention_features=attention_features,
+            attention_heads=attention_heads,
+        ),
+    )
+
+
+def TiledCrossAttentionItem(
+    channels: Optional[int] = None,
+    attention_features: Optional[int] = None,
+    attention_heads: Optional[int] = None,
+    embedding_features: Optional[int] = None,
+    tile_size: Optional[int] = None,
+    **kwargs,
+) -> nn.Module:
+    msg = "TiledCrossAttentionItem requires tile_size"
+    assert exists(tile_size), msg
+    return Tiled(
+        tile_size,
+        CrossAttentionItem(  # type: ignore
+            channels=channels,
+            attention_features=attention_features,
+            attention_heads=attention_heads,
+            embedding_features=embedding_features,
+        ),
     )
 
 
