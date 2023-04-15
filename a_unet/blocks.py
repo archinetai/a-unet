@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from einops import pack, rearrange, reduce, repeat, unpack
 from torch import Tensor, einsum, nn
 from typing_extensions import TypeGuard
+from . import config
 
 V = TypeVar("V")
 
@@ -105,6 +106,30 @@ class Packed(Sequential):
         x = super().forward(x, *args)
         x = rearrange(x, "b n d -> b d n")
         x = unpack(x, ps, "b d *")[0]
+        return x
+
+
+class Tiled(Sequential):
+    """Splits samples time-wise into multiple smaller samples, useful for tiling attention"""
+
+    def __init__(self, tile_size: int, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tile_size = tile_size
+
+    def forward(
+        self,
+        x: Tensor,
+        f: Optional[Tensor] = None,
+        context: Optional[Tensor] = None,
+        *args,
+    ) -> Tensor:
+        t = int(x.shape[2] / self.tile_size)
+        x = rearrange(x, "b c (t k) -> (b t) c k", k=self.tile_size)
+        if not context is None:
+            x = super().forward(x, f, context.repeat_interleave(t, dim=0), *args)
+        else:
+            x = super().forward(x, *args)
+        x = rearrange(x, "(b t) c k -> b c (t k)", t=t)
         return x
 
 
@@ -272,24 +297,43 @@ def ConvNextV2Block(dim: int, channels: int) -> nn.Module:
     return Module([block], lambda x: x + block(x))
 
 
-def AttentionBase(features: int, head_features: int, num_heads: int) -> nn.Module:
+def AttentionBase(features: int, head_features: int, num_heads: int, window_size: int = None) -> nn.Module:
     scale = head_features**-0.5
     mid_features = head_features * num_heads
     to_out = nn.Linear(in_features=mid_features, out_features=features, bias=False)
+    if config.use_flash_attention:
+        import xformers
+        import xformers.ops
+        from xformers.components.attention import (
+            sparsify,
+        )
+        from xformers.components.attention.attention_patterns import (
+            local_1d_pattern,
+        )
+
 
     def forward(
         q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None
     ) -> Tensor:
-        h = num_heads
-        # Split heads
-        q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=h), (q, k, v))
-        # Compute similarity matrix and add eventual mask
-        sim = einsum("... n d, ... m d -> ... n m", q, k) * scale
-        # Get attention matrix with softmax
-        attn = sim.softmax(dim=-1)
-        # Compute values
-        out = einsum("... n m, ... m d -> ... n d", attn, v)
-        out = rearrange(out, "b h n d -> b n (h d)")
+        if config.use_flash_attention:
+            # Use memory efficient attention
+            if window_size is not None:
+                mask = local_1d_pattern(q.shape[1], window_size)
+                mask = sparsify(mask)
+            out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=mask)
+        else:
+            h = num_heads
+            # Split heads
+            q, k, v = map(
+                lambda t: rearrange(t, "b n (h d) -> b h n d", h=h), (q, k, v)
+            )
+            # Compute similarity matrix and add eventual mask
+            sim = einsum("... n d, ... m d -> ... n m", q, k) * scale
+            # Get attention matrix with softmax
+            attn = sim.softmax(dim=-1)
+            # Compute values
+            out = einsum("... n m, ... m d -> ... n d", attn, v)
+            out = rearrange(out, "b h n d -> b n (h d)")
         return to_out(out)
 
     return Module([to_out], forward)
