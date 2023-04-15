@@ -252,20 +252,30 @@ def ConvNextV2Block(dim: int, channels: int) -> nn.Module:
     return Module([block], lambda x: x + block(x))
 
 
-def AttentionBase(features: int, head_features: int, num_heads: int) -> nn.Module:
+def AttentionBase(features: int, head_features: int, num_heads: int, window_size: int = None) -> nn.Module:
     scale = head_features**-0.5
     mid_features = head_features * num_heads
     to_out = nn.Linear(in_features=mid_features, out_features=features, bias=False)
     if config.use_flash_attention:
         import xformers
         import xformers.ops
+        from xformers.components.attention import (
+            sparsify,
+        )
+        from xformers.components.attention.attention_patterns import (
+            local_1d_pattern,
+        )
+
 
     def forward(
         q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None
     ) -> Tensor:
         if config.use_flash_attention:
             # Use memory efficient attention
-            out = xformers.ops.memory_efficient_attention(q, k, v)
+            if window_size is not None:
+                mask = local_1d_pattern(q.shape[1], window_size)
+                mask = sparsify(mask)
+            out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=mask)
         else:
             h = num_heads
             # Split heads
