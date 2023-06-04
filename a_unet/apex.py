@@ -353,6 +353,7 @@ class Block(nn.Module):
         items_up: Optional[Sequence[Callable]] = None,
         out_channels: Optional[int] = None,
         inner_block: Optional[nn.Module] = None,
+        resnet_dilation_factor: Optional[int] = None,
         **kwargs,
     ):
         super().__init__()
