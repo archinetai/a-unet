@@ -110,7 +110,7 @@ def ResnetItem(
     resnet_kernel_size: int = 3,
     **kwargs,
 ) -> nn.Module:
-    msg = "ResnetItem requires dim, channels, resnet_groups, and resnet_dropout_rate"
+    msg = f"ResnetItem requires dim ({dim}), channels ({channels}), resnet_groups ({resnet_groups}), and resnet_dropout_rate ({resnet_dropout_rate})"
     assert exists(dim) and exists(channels) and exists(resnet_groups) and exists(resnet_dropout_rate), msg
     Item = SelectX(ResnetBlock)
     conv_block_t = T(ConvBlock)(norm_t=T(nn.GroupNorm)(num_groups=resnet_groups), drop_t=T(nn.Dropout)(p=resnet_dropout_rate))
