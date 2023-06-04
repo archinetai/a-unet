@@ -105,13 +105,14 @@ def UpsampleItem(
 def ResnetItem(
     dim: Optional[int] = None,
     channels: Optional[int] = None,
+    dilation: Optional[int] = None
     resnet_groups: Optional[int] = None,
     resnet_dropout_rate: Optional[float] = None,
     resnet_kernel_size: int = 3,
     **kwargs,
 ) -> nn.Module:
-    msg = f"ResnetItem requires dim ({dim}), channels ({channels}), resnet_groups ({resnet_groups}), and resnet_dropout_rate ({resnet_dropout_rate})"
-    assert exists(dim) and exists(channels) and exists(resnet_groups) and exists(resnet_dropout_rate), msg
+    msg = f"ResnetItem requires dim ({dim}), channels ({channels}), resnet_groups ({resnet_groups}), resnet_dropout_rate ({resnet_dropout_rate}), and dilation ({dilation})"
+    assert exists(dim) and exists(channels) and exists(resnet_groups) and exists(resnet_dropout_rate) and exists(dilation), msg
     Item = SelectX(ResnetBlock)
     conv_block_t = T(ConvBlock)(norm_t=T(nn.GroupNorm)(num_groups=resnet_groups), drop_t=T(nn.Dropout)(p=resnet_dropout_rate))
     return Item(  # type: ignore
