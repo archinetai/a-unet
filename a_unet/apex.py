@@ -360,11 +360,9 @@ class Block(nn.Module):
 
         cycle = 0
         print(items)
-        print(type(ResnetItem))
         for idx, item in enumerate(items):
-            print(idx, item)
-            print(type(item))
-            if isinstance(item, ResnetItem):
+            print(idx, item.__name__)
+            if item.__name__ == 'ResnetItem':
                 items[idx] = T(item)(dilation=dilation_factor**cycle)
                 cycle+=1
 
