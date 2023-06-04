@@ -122,7 +122,6 @@ def ResnetItem(
         dilation=dilation,
         kernel_size=resnet_kernel_size,
         conv_block_t=conv_block_t,
-        dropout_rate=resnet_dropout_rate,
     )
 
 
