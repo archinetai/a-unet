@@ -359,7 +359,9 @@ class Block(nn.Module):
         out_channels = default(out_channels, in_channels)
 
         cycle = 0
+        print(items)
         for idx, item in enumerate(items):
+            print(idx, item)
             if isinstance(item, ResnetItem):
                 items[idx] = T(item)(dilation=dilation_factor**cycle)
                 cycle+=1
