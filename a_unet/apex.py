@@ -368,10 +368,10 @@ class Block(nn.Module):
         # Build items stack: items down -> inner block -> items up
         items_all: List[nn.Module] = []
         exp = list(reversed(range(99999)))
-        items_all += [item_t(**items_kwargs, dilation=resnet_dilation_factor**exp.pop()) if item_t.__name__ == 'ResnetItem' else item_t(**items_kwargs) for item_t in items_down]
+        items_all += [item_t(dilation=resnet_dilation_factor**exp.pop(), **items_kwargs) if item_t.__name__ == 'ResnetItem' else item_t(**items_kwargs) for item_t in items_down]
         items_all += [inner_block] if exists(inner_block) else []
         exp = list(reversed(range(99999)))
-        items_all += [item_t(**items_kwargs, dilation=resnet_dilation_factor**exp.pop()) if item_t.__name__ == 'ResnetItem' else item_t(**items_kwargs) for item_t in items_up]
+        items_all += [item_t(dilation=resnet_dilation_factor**exp.pop(), **items_kwargs) if item_t.__name__ == 'ResnetItem' else item_t(**items_kwargs) for item_t in items_up]
 
         self.skip_adapter = skip_adapter_t(**items_kwargs)
         self.block = Sequential(*items_all)
