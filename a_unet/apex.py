@@ -357,14 +357,7 @@ class Block(nn.Module):
         super().__init__()
         out_channels = default(out_channels, in_channels)
 
-        cycle = 0
-        print(items)
-        for idx, item in enumerate(items):
-            print(idx, item.__name__)
-            if item.__name__ == 'ResnetItem':
-                items[idx] = T(item)(dilation=resnet_dilation_factor**cycle, **kwargs)
-                print(items[idx], resnet_dilation_factor**cycle)
-                cycle+=1
+        exp = list(reversed(range(99999)))
 
         items_up = default(items_up, items)  # type: ignore
         items_down = [downsample_t] + list(items)
@@ -375,9 +368,9 @@ class Block(nn.Module):
 
         # Build items stack: items down -> inner block -> items up
         items_all: List[nn.Module] = []
-        items_all += [item_t(**items_kwargs) for item_t in items_down]
+        items_all += [item_t(**items_kwargs, dilation=resnet_dilation_factor**exp.pop()) if item_t.__name__ == 'ResnetItem' else item_t(**items_kwargs) for item_t in items_down]
         items_all += [inner_block] if exists(inner_block) else []
-        items_all += [item_t(**items_kwargs) for item_t in items_up]
+        items_all += [item_t(**items_kwargs, dilation=resnet_dilation_factor**exp.pop()) if item_t.__name__ == 'ResnetItem' else item_t(**items_kwargs) for item_t in items_up]
 
         self.skip_adapter = skip_adapter_t(**items_kwargs)
         self.block = Sequential(*items_all)
