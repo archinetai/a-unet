@@ -105,7 +105,7 @@ def UpsampleItem(
 def ResnetItem(
     dim: Optional[int] = None,
     channels: Optional[int] = None,
-    dilation: Optional[int] = None
+    dilation: Optional[int] = None,
     resnet_groups: Optional[int] = None,
     resnet_dropout_rate: Optional[float] = None,
     resnet_kernel_size: int = 3,
