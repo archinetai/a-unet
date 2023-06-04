@@ -106,19 +106,23 @@ def ResnetItem(
     dim: Optional[int] = None,
     channels: Optional[int] = None,
     resnet_groups: Optional[int] = None,
+    resnet_dilation_factor: Optional[int] = None,
+    resnet_dropout_rate: Optional[float] = None,
     resnet_kernel_size: int = 3,
     **kwargs,
 ) -> nn.Module:
-    msg = "ResnetItem requires dim, channels, and resnet_groups"
-    assert exists(dim) and exists(channels) and exists(resnet_groups), msg
+    msg = "ResnetItem requires dim, channels, resnet_groups, resnet_dropout_rate, and resnet_dilation_factor"
+    assert exists(dim) and exists(channels) and exists(resnet_groups) and exists(resnet_dilation_factor) and exists(resnet_dropout_rate), msg
     Item = SelectX(ResnetBlock)
-    conv_block_t = T(ConvBlock)(norm_t=T(nn.GroupNorm)(num_groups=resnet_groups))
+    conv_block_t = T(ConvBlock)(norm_t=T(nn.GroupNorm)(num_groups=resnet_groups), drop_t=T(nn.Dropout)(p=resnet_dropout_rate))
     return Item(  # type: ignore
         dim=dim,
         in_channels=channels,
         out_channels=channels,
         kernel_size=resnet_kernel_size,
         conv_block_t=conv_block_t,
+        dilation_factor = resnet_dilation_factor,
+        dropout_rate = resnet_dropout_rate
     )
 
 
@@ -353,6 +357,12 @@ class Block(nn.Module):
     ):
         super().__init__()
         out_channels = default(out_channels, in_channels)
+
+        cycle = 0
+        for idx, item in enumerate(items):
+            if isinstance(item, ResnetItem):
+                items[idx] = T(item)(dilation=dilation_factor**cycle)
+                cycle+=1
 
         items_up = default(items_up, items)  # type: ignore
         items_down = [downsample_t] + list(items)
