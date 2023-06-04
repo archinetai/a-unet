@@ -363,7 +363,7 @@ class Block(nn.Module):
         for idx, item in enumerate(items):
             print(idx, item.__name__)
             if item.__name__ == 'ResnetItem':
-                items[idx] = T(item)(dilation=resnet_dilation_factor**cycle)
+                items[idx] = T(item)(dilation=resnet_dilation_factor**cycle, **kwargs)
                 print(items[idx]())
                 cycle+=1
 
