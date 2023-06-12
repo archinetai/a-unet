@@ -192,12 +192,14 @@ def ConvBlock(
     in_channels: int,
     activation_t=nn.SiLU,
     norm_t=T(nn.GroupNorm)(num_groups=1),
+    drop_t=T(nn.Dropout)(p=0.05),
     conv_t=Conv,
     **kwargs,
 ) -> nn.Module:
     return nn.Sequential(
         norm_t(num_channels=in_channels),
         activation_t(),
+        drop_t(),
         conv_t(dim=dim, in_channels=in_channels, **kwargs),
     )
 
@@ -206,19 +208,20 @@ def ResnetBlock(
     dim: int,
     in_channels: int,
     out_channels: int,
+    dilation: int,
     kernel_size: int = 3,
     conv_block_t=ConvBlock,
     conv_t=Conv,
     **kwargs,
 ) -> nn.Module:
     ConvBlock = T(conv_block_t)(
-        dim=dim, kernel_size=kernel_size, padding=(kernel_size - 1) // 2, **kwargs
+        dim=dim, **kwargs
     )
     Conv = T(conv_t)(dim=dim, kernel_size=1)
 
     conv_block = Sequential(
-        ConvBlock(in_channels=in_channels, out_channels=out_channels),
-        ConvBlock(in_channels=out_channels, out_channels=out_channels),
+        ConvBlock(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding=((kernel_size - 1) // 2)*dilation, dilation=dilation),
+        ConvBlock(in_channels=out_channels, out_channels=out_channels, kernel_size=1)
     )
     conv = nn.Identity()
     if in_channels != out_channels:

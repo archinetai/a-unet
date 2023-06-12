@@ -105,18 +105,21 @@ def UpsampleItem(
 def ResnetItem(
     dim: Optional[int] = None,
     channels: Optional[int] = None,
+    dilation: Optional[int] = None,
     resnet_groups: Optional[int] = None,
+    resnet_dropout_rate: Optional[float] = None,
     resnet_kernel_size: int = 3,
     **kwargs,
 ) -> nn.Module:
-    msg = "ResnetItem requires dim, channels, and resnet_groups"
-    assert exists(dim) and exists(channels) and exists(resnet_groups), msg
+    msg = f"ResnetItem requires dim ({dim}), channels ({channels}), resnet_groups ({resnet_groups}), resnet_dropout_rate ({resnet_dropout_rate}), and dilation ({dilation})"
+    assert exists(dim) and exists(channels) and exists(resnet_groups) and exists(resnet_dropout_rate) and exists(dilation), msg
     Item = SelectX(ResnetBlock)
-    conv_block_t = T(ConvBlock)(norm_t=T(nn.GroupNorm)(num_groups=resnet_groups))
+    conv_block_t = T(ConvBlock)(norm_t=T(nn.GroupNorm)(num_groups=resnet_groups), drop_t=T(nn.Dropout)(p=resnet_dropout_rate))
     return Item(  # type: ignore
         dim=dim,
         in_channels=channels,
         out_channels=channels,
+        dilation=dilation,
         kernel_size=resnet_kernel_size,
         conv_block_t=conv_block_t,
     )
@@ -349,6 +352,7 @@ class Block(nn.Module):
         items_up: Optional[Sequence[Callable]] = None,
         out_channels: Optional[int] = None,
         inner_block: Optional[nn.Module] = None,
+        resnet_dilation_factor: Optional[int] = None,
         **kwargs,
     ):
         super().__init__()
@@ -363,9 +367,11 @@ class Block(nn.Module):
 
         # Build items stack: items down -> inner block -> items up
         items_all: List[nn.Module] = []
-        items_all += [item_t(**items_kwargs) for item_t in items_down]
+        exp = list(reversed(range(99999)))
+        items_all += [item_t(dilation=resnet_dilation_factor**exp.pop(), **items_kwargs) if item_t.__name__ == 'ResnetItem' else item_t(**items_kwargs) for item_t in items_down]
         items_all += [inner_block] if exists(inner_block) else []
-        items_all += [item_t(**items_kwargs) for item_t in items_up]
+        exp = list(reversed(range(99999)))
+        items_all += [item_t(dilation=resnet_dilation_factor**exp.pop(), **items_kwargs) if item_t.__name__ == 'ResnetItem' else item_t(**items_kwargs) for item_t in items_up]
 
         self.skip_adapter = skip_adapter_t(**items_kwargs)
         self.block = Sequential(*items_all)
